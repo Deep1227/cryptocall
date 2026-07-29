@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CryptoCall - Secure P2P Video</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🔒 CryptoCall</h1>
+            <p>End-to-End Encrypted Peer-to-Peer Video. No Phone Numbers. No Logs.</p>
+        </header>
+
+        <div id="setup-screen" class="card">
+            <div class="action-box">
+                <button id="create-btn" class="btn primary">Create Secure Room</button>
+            </div>
+            
+            <div class="divider"><span>OR</span></div>
+            
+            <div class="action-box">
+                <input type="text" id="room-input" placeholder="Enter Special Room Code">
+                <button id="join-btn" class="btn secondary">Join Room</button>
+            </div>
+        </div>
+
+        <div id="video-screen" class="card hidden">
+            <div class="room-info">
+                <span>Room Code: <strong id="display-room-code">...</strong></span>
+                <button id="leave-btn" class="btn danger">Leave Call</button>
+            </div>
+            <div class="video-grid">
+                <div class="video-container">
+                    <video id="local-video" autoplay playsinline muted></video>
+                    <span class="label">You</span>
+                </div>
+                <div class="video-container">
+                    <video id="remote-video" autoplay playsinline></video>
+                    <span class="label">Peer</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+   <script src="/socket.io/socket.io.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
