@@ -3,12 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CryptoCall - Secure P2P Video</title>
+    <title>CryptoCall - Secure P2P Video & Chat</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div class="container">
-        <header>
+        <header id="main-header">
             <h1>🔒 CryptoCall</h1>
             <p>End-to-End Encrypted Peer-to-Peer Video. No Phone Numbers. No Logs.</p>
         </header>
@@ -29,38 +29,34 @@
         <div id="video-screen" class="card hidden">
             <div class="room-info">
                 <span>Room Code: <strong id="display-room-code">...</strong></span>
-                <button id="leave-btn" class="btn danger">Leave Call</button>
             </div>
-            <div class="video-grid">
-                <div class="video-container">
-                    <video id="local-video" autoplay playsinline muted></video>
-                    <span class="label">You</span>
-                </div>
-                <div class="video-container">
+            
+            <div class="main-call-layout">
+                <div class="video-grid">
                     <video id="remote-video" autoplay playsinline></video>
-                    <span class="label">Peer</span>
+                    
+                    <video id="local-video" autoplay playsinline muted></video>
+                    
+                    <div class="controls-bar">
+                        <button id="mic-btn" class="ctrl-btn">🎤 Mute Mic</button>
+                        <button id="cam-btn" class="ctrl-btn">📷 Turn Off Cam</button>
+                        <button id="leave-btn" class="ctrl-btn danger-btn">📞 End</button>
+                    </div>
+                </div>
+
+                <div class="chat-panel">
+                    <div class="chat-header">🔒 Encrypted Chat</div>
+                    <div id="chat-messages" class="chat-messages"></div>
+                    <div class="chat-input-area">
+                        <input type="text" id="chat-input" placeholder="Type a secure message...">
+                        <button id="send-chat-btn" class="btn primary">Send</button>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 
-   <script src="/socket.io/socket.io.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
     <script src="app.js"></script>
 </body>
-</html><div id="video-screen" class="card hidden">
-            <div class="room-info">
-                <span>Room Code: <strong id="display-room-code">...</strong></span>
-            </div>
-            
-            <div class="video-grid">
-                <video id="remote-video" autoplay playsinline></video>
-                
-                <video id="local-video" autoplay playsinline muted></video>
-                
-                <div class="controls-bar">
-                    <button id="mic-btn" class="ctrl-btn">🎤 Mute Mic</button>
-                    <button id="cam-btn" class="ctrl-btn">📷 Turn Off Cam</button>
-                    <button id="leave-btn" class="ctrl-btn danger-btn">📞 End</button>
-                </div>
-            </div>
-        </div>
+</html>
