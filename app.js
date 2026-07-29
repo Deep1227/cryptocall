@@ -1,6 +1,5 @@
 const socket = io();
 
-// UI Elements
 const setupScreen = document.getElementById('setup-screen');
 const videoScreen = document.getElementById('video-screen');
 const mainHeader = document.getElementById('main-header');
@@ -11,8 +10,6 @@ const roomInput = document.getElementById('room-input');
 const displayRoomCode = document.getElementById('display-room-code');
 const localVideo = document.getElementById('local-video');
 const remoteVideo = document.getElementById('remote-video');
-
-// New Controls & Chat UI Elements
 const micBtn = document.getElementById('mic-btn');
 const camBtn = document.getElementById('cam-btn');
 const chatInput = document.getElementById('chat-input');
@@ -21,9 +18,8 @@ const chatMessages = document.getElementById('chat-messages');
 
 let localStream = null;
 let peerConnection = null;
+let dataChannel = null; // NEW: Direct P2P text channel
 let currentRoom = null;
-let targetPeerId = null; 
-
 let isAudioMuted = false;
 let isVideoStopped = false;
 
@@ -35,30 +31,15 @@ const rtcConfig = {
 };
 
 function generateRoomCode() {
-    const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
-    let code = '';
-    for (let i = 0; i < 8; i++) {
-        if (i === 4) code += '-';
-        code += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return code;
+    return Math.random().toString(36).substring(2, 10);
 }
 
 async function startLocalVideo() {
-    try {
-        localStream = await navigator.mediaDevices.getUserMedia({
-            video: true,
-            audio: true
-        });
-        localVideo.srcObject = localStream;
-    } catch (error) {
-        console.error("Error accessing media devices.", error);
-        alert("Please allow camera and microphone access.");
-    }
+    localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    localVideo.srcObject = localStream;
 }
 
 function createPeerConnection(peerId) {
-    targetPeerId = peerId;
     peerConnection = new RTCPeerConnection(rtcConfig);
 
     localStream.getTracks().forEach(track => {
@@ -66,18 +47,29 @@ function createPeerConnection(peerId) {
     });
 
     peerConnection.ontrack = (event) => {
-        if (remoteVideo.srcObject !== event.streams[0]) {
-            remoteVideo.srcObject = event.streams[0];
-        }
+        remoteVideo.srcObject = event.streams[0];
     };
 
     peerConnection.onicecandidate = (event) => {
         if (event.candidate) {
-            socket.emit('signal', {
-                to: peerId,
-                signal: { candidate: event.candidate }
-            });
+            socket.emit('signal', { to: peerId, signal: { candidate: event.candidate } });
         }
+    };
+
+    // NEW: Create Data Channel for instant chat
+    dataChannel = peerConnection.createDataChannel('chat');
+    setupDataChannel(dataChannel);
+
+    // NEW: Listen for peer's Data Channel
+    peerConnection.ondatachannel = (event) => {
+        setupDataChannel(event.channel);
+    };
+}
+
+// NEW: Handle instant P2P messages
+function setupDataChannel(channel) {
+    channel.onmessage = (event) => {
+        appendMessage(event.data, 'peer');
     };
 }
 
@@ -93,7 +85,7 @@ createBtn.addEventListener('click', async () => {
 
 joinBtn.addEventListener('click', async () => {
     const code = roomInput.value.trim();
-    if (!code) return alert("Please enter a room code.");
+    if (!code) return;
     currentRoom = code;
     displayRoomCode.innerText = currentRoom;
     await startLocalVideo();
@@ -123,69 +115,50 @@ socket.on('signal', async (data) => {
         await peerConnection.setRemoteDescription(new RTCSessionDescription(data.signal.answer));
     } 
     else if (data.signal.candidate) {
-        try {
-            await peerConnection.addIceCandidate(new RTCIceCandidate(data.signal.candidate));
-        } catch (e) {
-            console.error("Error adding ICE candidate", e);
-        }
+        await peerConnection.addIceCandidate(new RTCIceCandidate(data.signal.candidate));
     }
 });
 
-// --- TOGGLE CONTROLS FUNCTIONALITY ---
+// NEW: Listen for ghost call fix
+socket.on('peer-disconnected', () => {
+    alert("The other person has left the call.");
+    window.location.reload(); 
+});
+
 micBtn.addEventListener('click', () => {
-    if (!localStream) return;
     isAudioMuted = !isAudioMuted;
-    localStream.getAudioTracks().forEach(track => track.enabled = !isAudioMuted);
-    micBtn.innerText = isAudioMuted ? "🔇 Unmute Mic" : "🎤 Mute Mic";
-    micBtn.style.background = isAudioMuted ? "rgba(239, 68, 68, 0.5)" : "rgba(255, 255, 255, 0.2)";
+    localStream.getAudioTracks().forEach(t => t.enabled = !isAudioMuted);
+    micBtn.innerText = isAudioMuted ? "🔇 Unmute" : "🎤 Mute";
+    micBtn.classList.toggle('off-state', isAudioMuted);
 });
 
 camBtn.addEventListener('click', () => {
-    if (!localStream) return;
     isVideoStopped = !isVideoStopped;
-    localStream.getVideoTracks().forEach(track => track.enabled = !isVideoStopped);
-    camBtn.innerText = isVideoStopped ? "📷 Turn On Cam" : "📷 Turn Off Cam";
-    camBtn.style.background = isVideoStopped ? "rgba(239, 68, 68, 0.5)" : "rgba(255, 255, 255, 0.2)";
+    localStream.getVideoTracks().forEach(t => t.enabled = !isVideoStopped);
+    camBtn.innerText = isVideoStopped ? "📷 Cam Off" : "📷 Cam On";
+    camBtn.classList.toggle('off-state', isVideoStopped);
 });
 
-leaveBtn.addEventListener('click', () => {
-    window.location.reload();
-});
+leaveBtn.addEventListener('click', () => window.location.reload());
 
-// --- TEXT CHAT FUNCTIONALITY ---
 function appendMessage(text, sender) {
     const msgDiv = document.createElement('div');
     msgDiv.classList.add('msg', sender);
     msgDiv.innerText = text;
     chatMessages.appendChild(msgDiv);
-    chatMessages.scrollTop = chatMessages.scrollHeight; // Auto-scrolls down
+    chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
+// UPGRADED: Instant Chat sending
 function sendTextMessage() {
     const text = chatInput.value.trim();
     if (!text) return;
-    
-    // Append to our window
     appendMessage(text, 'me');
     chatInput.value = '';
-
-    // Send to peer over signaling network
-    if (targetPeerId) {
-        socket.emit('signal', {
-            to: targetPeerId,
-            signal: { chatMessage: text }
-        });
+    if (dataChannel && dataChannel.readyState === 'open') {
+        dataChannel.send(text);
     }
 }
 
 sendChatBtn.addEventListener('click', sendTextMessage);
-chatInput.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') sendTextMessage();
-});
-
-// Handle receiving text message packet
-socket.on('signal', (data) => {
-    if (data.signal.chatMessage) {
-        appendMessage(data.signal.chatMessage, 'peer');
-    }
-});
+chatInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendTextMessage(); });
