@@ -145,4 +145,35 @@ socket.on('signal', async (data) => {
 // Action: Leave Call
 leaveBtn.addEventListener('click', () => {
     window.location.reload(); // Quick way to reset all connections and state cleanly
+});// Controls State Tracker
+let isAudioMuted = false;
+let isVideoStopped = false;
+
+const micBtn = document.getElementById('mic-btn');
+const camBtn = document.getElementById('cam-btn');
+
+// Toggle Microphone Track
+micBtn.addEventListener('click', () => {
+    if (!localStream) return;
+    
+    isAudioMuted = !isAudioMuted;
+    localStream.getAudioTracks().forEach(track => {
+        track.enabled = !isAudioMuted;
+    });
+    
+    micBtn.innerText = isAudioMuted ? "🔇 Unmute Mic" : "🎤 Mute Mic";
+    micBtn.style.background = isAudioMuted ? "rgba(239, 68, 68, 0.5)" : "rgba(255, 255, 255, 0.2)";
+});
+
+// Toggle Camera Track
+camBtn.addEventListener('click', () => {
+    if (!localStream) return;
+    
+    isVideoStopped = !isVideoStopped;
+    localStream.getVideoTracks().forEach(track => {
+        track.enabled = !isVideoStopped;
+    });
+    
+    camBtn.innerText = isVideoStopped ? "📷 Turn On Cam" : "📷 Turn Off Cam";
+    camBtn.style.background = isVideoStopped ? "rgba(239, 68, 68, 0.5)" : "rgba(255, 255, 255, 0.2)";
 });

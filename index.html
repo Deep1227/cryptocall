@@ -47,4 +47,20 @@
    <script src="/socket.io/socket.io.js"></script>
     <script src="app.js"></script>
 </body>
-</html>
+</html><div id="video-screen" class="card hidden">
+            <div class="room-info">
+                <span>Room Code: <strong id="display-room-code">...</strong></span>
+            </div>
+            
+            <div class="video-grid">
+                <video id="remote-video" autoplay playsinline></video>
+                
+                <video id="local-video" autoplay playsinline muted></video>
+                
+                <div class="controls-bar">
+                    <button id="mic-btn" class="ctrl-btn">🎤 Mute Mic</button>
+                    <button id="cam-btn" class="ctrl-btn">📷 Turn Off Cam</button>
+                    <button id="leave-btn" class="ctrl-btn danger-btn">📞 End</button>
+                </div>
+            </div>
+        </div>
