@@ -5,34 +5,59 @@ const io = require('socket.io')(http);
 
 app.use(express.static(__dirname));
 
-// NEW: Track which room each user is in
-const userRooms = {}; 
+// STEALTH MEMORY: Maps emails to current network connections. 
+// Wipes instantly when someone disconnects. No database used.
+const onlineUsers = {}; 
+const socketToEmail = {};
 
 io.on('connection', (socket) => {
     
-    socket.on('join-room', (roomId) => {
-        socket.join(roomId);
-        userRooms[socket.id] = roomId; // Remember this user's room
-        socket.to(roomId).emit('user-joined', socket.id);
+    // 1. User logs in and comes online
+    socket.on('user-online', (email) => {
+        onlineUsers[email] = socket.id;
+        socketToEmail[socket.id] = email;
+        console.log(`🔒 ${email} is online and secured.`);
     });
 
-    socket.on('signal', (data) => {
-        io.to(data.to).emit('signal', {
-            from: socket.id,
-            signal: data.signal
-        });
+    // 2. Route Text Messages (Instant P2P)
+    socket.on('send-message', (data) => {
+        const targetSocket = onlineUsers[data.to];
+        if (targetSocket) {
+            io.to(targetSocket).emit('receive-message', {
+                from: socketToEmail[socket.id],
+                text: data.text
+            });
+        }
     });
 
-    // NEW: When a user closes the tab or leaves
+    // 3. Route Video Call Signals
+    socket.on('webrtc-signal', (data) => {
+        const targetSocket = onlineUsers[data.to];
+        if (targetSocket) {
+            io.to(targetSocket).emit('webrtc-signal', {
+                from: socketToEmail[socket.id],
+                signal: data.signal
+            });
+        }
+    });
+
+    // 4. Handle Disconnects & Hangups
+    socket.on('end-call', (data) => {
+        const targetSocket = onlineUsers[data.to];
+        if (targetSocket) {
+            io.to(targetSocket).emit('call-ended');
+        }
+    });
+
     socket.on('disconnect', () => {
-        const roomId = userRooms[socket.id];
-        if (roomId) {
-            // Tell the remaining person to close the call
-            socket.to(roomId).emit('peer-disconnected');
-            delete userRooms[socket.id];
+        const email = socketToEmail[socket.id];
+        if (email) {
+            delete onlineUsers[email];
+            delete socketToEmail[socket.id];
+            console.log(`💨 ${email} vanished from network.`);
         }
     });
 });
 
 const PORT = process.env.PORT || 3000;
-http.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+http.listen(PORT, () => console.log(`🚀 Zero-Log Server running on port ${PORT}`));
