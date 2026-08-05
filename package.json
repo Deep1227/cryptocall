@@ -1,4 +1,6 @@
-{
+"scripts": {
+    "start": "node server.js"
+  },{
   "name": "cryptocall",
   "version": "1.0.0",
   "description": "",
