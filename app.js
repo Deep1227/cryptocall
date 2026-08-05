@@ -1,9 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
-// ==========================================
 // 1. FIREBASE CONFIG
-// ==========================================
 const firebaseConfig = {
   apiKey: "AIzaSyA1bkUvt6PkFhR83bnHAPABbkgWijMyKsI",
   authDomain: "cryptocall-32dbb.firebaseapp.com",
@@ -17,9 +15,7 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const socket = io();
 
-// ==========================================
-// 2. UI ELEMENTS & STATE
-// ==========================================
+// 2. UI ELEMENTS
 const authScreen = document.getElementById('auth-screen');
 const appScreen = document.getElementById('app-screen');
 const loginBtn = document.getElementById('login-btn');
@@ -53,10 +49,7 @@ let activeChatEmail = null;
 let currentCallPeer = null; 
 let localStream = null;
 let peerConnection = null;
-let isAudioMuted = false;
-let isVideoStopped = false;
 
-// SAFE LOCAL STORAGE FETCHING (Prevents app crashes)
 let secretPIN = localStorage.getItem('cryptoPIN') || '1234'; 
 let hiddenEmails = [];
 let isUnlocked = false;
@@ -72,14 +65,10 @@ try {
     localStorage.removeItem('hiddenEmails');
 }
 
-// ==========================================
-// 3. AUTHENTICATION & SOCKET RECONNECTION
-// ==========================================
-
+// 3. AUTH & SOCKET RECONNECTION
 socket.on('connect', () => {
     if (currentUser) {
-        const normalizedEmail = currentUser.email.toLowerCase().trim();
-        socket.emit('user-online', { email: normalizedEmail, uid: currentUser.uid });
+        socket.emit('user-online', { email: currentUser.email, uid: currentUser.uid });
     }
 });
 
@@ -102,16 +91,12 @@ loginBtn.addEventListener('click', async () => {
 });
 
 logoutBtn.addEventListener('click', async () => {
-    try {
-        await signOut(auth);
-        activeChatEmail = null;
-        currentUser = null;
-        chatList.innerHTML = '';
-        chatMessages.innerHTML = '';
-        alert("Logged out successfully!");
-    } catch (err) {
-        alert("Logout error: " + err.message);
-    }
+    await signOut(auth);
+    activeChatEmail = null;
+    currentUser = null;
+    chatList.innerHTML = '';
+    chatMessages.innerHTML = '';
+    alert("Logged out successfully!");
 });
 
 onAuthStateChanged(auth, (user) => {
@@ -124,18 +109,14 @@ onAuthStateChanged(auth, (user) => {
         authScreen.classList.add('hidden');
         appScreen.classList.remove('hidden');
         loginBtn.innerText = "Log In / Sign Up";
-
         socket.emit('user-online', { email: normalizedEmail, uid: user.uid });
-        chatList.innerHTML = ''; 
     } else {
         authScreen.classList.remove('hidden');
         appScreen.classList.add('hidden');
     }
 });
 
-// ==========================================
-// 4. CHAT, SEARCH & STEALTH LOGIC
-// ==========================================
+// 4. CHAT, SEARCH & STEALTH
 searchInput.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') {
         const text = searchInput.value.trim();
@@ -150,25 +131,19 @@ searchInput.addEventListener('keypress', (e) => {
         }
 
         if (text.startsWith('/pin ')) {
-            const newPin = text.split(' ')[1];
-            if (newPin && newPin.length >= 4) {
-                secretPIN = newPin;
-                localStorage.setItem('cryptoPIN', secretPIN);
-                alert(`Secret PIN successfully changed to: ${secretPIN}`);
-                searchInput.value = '';
-            }
-            return;
-        }
-
-        if (text.startsWith('/')) {
-            alert("Invalid command! Type your PIN to unlock, or /pin to change it.");
+            secretPIN = text.split(' ')[1];
+            localStorage.setItem('cryptoPIN', secretPIN);
+            alert(`PIN changed to: ${secretPIN}`);
             searchInput.value = '';
             return;
         }
 
         const targetEmail = text.toLowerCase().trim();
+        
+        // Strict Reflection Check
         if (targetEmail === currentUser.email.toLowerCase().trim()) {
-            alert("Aap khud ko message nahi kar sakte!");
+            alert("You cannot chat with yourself!");
+            searchInput.value = '';
             return;
         }
 
@@ -177,7 +152,7 @@ searchInput.addEventListener('keypress', (e) => {
                 openChatWith(targetEmail);
                 searchInput.value = '';
             } else {
-                alert(`User '${targetEmail}' is currently offline or does not exist!`);
+                alert(`User '${targetEmail}' is offline or does not exist!`);
             }
         });
     }
@@ -188,9 +163,7 @@ function openChatWith(email) {
     activeChatEmail = normalizedEmail;
     activeChatEmailDisplay.innerText = normalizedEmail;
     activeAvatar.innerText = normalizedEmail.charAt(0).toUpperCase();
-    
-    // Emoji removed to stop encoding errors
-    chatMessages.innerHTML = '<div class="system-message">[Encrypted] Messages are end-to-end encrypted. No call logs are saved.</div>';
+    chatMessages.innerHTML = '<div class="system-message">🔒 End-to-end encrypted.</div>';
     
     if (!document.getElementById(`contact-${normalizedEmail}`)) {
         if (!hiddenEmails.includes(normalizedEmail) || isUnlocked) {
@@ -217,40 +190,27 @@ function openChatWith(email) {
 
 hideChatBtn.addEventListener('click', () => {
     if (!activeChatEmail) return;
-    
     if (!hiddenEmails.includes(activeChatEmail)) {
         hiddenEmails.push(activeChatEmail);
         localStorage.setItem('hiddenEmails', JSON.stringify(hiddenEmails));
     }
-    
     const chatNode = document.getElementById(`contact-${activeChatEmail}`);
     if (chatNode) chatNode.remove();
-    
     activeChatEmail = null;
-    chatMessages.innerHTML = '';
-    activeChatEmailDisplay.innerText = 'Select a chat';
-    activeAvatar.innerText = 'P';
     appScreen.classList.remove('in-chat'); 
-    
-    alert("Ghost Mode Activated. Chat hidden successfully!");
 });
 
 closeChatBtn.addEventListener('click', () => {
     if (!activeChatEmail) return;
-
     const chatNode = document.getElementById(`contact-${activeChatEmail}`);
     if (chatNode) chatNode.remove();
-
     hiddenEmails = hiddenEmails.filter(email => email !== activeChatEmail);
     localStorage.setItem('hiddenEmails', JSON.stringify(hiddenEmails));
-
     activeChatEmail = null;
-    chatMessages.innerHTML = '';
-    activeChatEmailDisplay.innerText = 'Select a chat';
-    activeAvatar.innerText = 'P';
     appScreen.classList.remove('in-chat');
 });
 
+// 5. MESSAGING & TICK STATUS ENGINE
 sendBtn.addEventListener('click', sendText);
 chatInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendText(); });
 
@@ -258,22 +218,63 @@ function sendText() {
     const text = chatInput.value.trim();
     if (!text || !activeChatEmail) return;
 
-    appendMessage(text, 'me');
+    // Generate unique ID for ticks
+    const msgId = 'msg-' + Date.now();
+    appendMessage(text, 'me', msgId);
     chatInput.value = '';
-    socket.emit('send-message', { to: activeChatEmail, text: text });
+
+    // Send to server with callback to catch delivery
+    socket.emit('send-message', { to: activeChatEmail, text: text, msgId: msgId }, (ack) => {
+        const tickElement = document.getElementById(`tick-${ack.msgId}`);
+        if (tickElement) {
+            if (ack.status === 'delivered') {
+                tickElement.innerText = '✓✓'; // Double tick
+            }
+        }
+    });
 }
 
 socket.on('receive-message', (data) => {
     if (!data || !data.from) return;
     const fromEmail = data.from.toLowerCase().trim();
-    if (activeChatEmail !== fromEmail) openChatWith(fromEmail);
-    appendMessage(data.text, 'peer');
+    
+    if (activeChatEmail !== fromEmail) {
+        openChatWith(fromEmail);
+    }
+    
+    appendMessage(data.text, 'peer', null);
+
+    // If chat is open, immediately emit "Seen" back to sender
+    if (activeChatEmail === fromEmail) {
+        socket.emit('message-seen', { to: fromEmail, msgId: data.msgId });
+    }
 });
 
-function appendMessage(text, sender) {
+// Triggered when the other user sees your message
+socket.on('message-seen-update', (data) => {
+    const tickElement = document.getElementById(`tick-${data.msgId}`);
+    if (tickElement) {
+        tickElement.innerText = '✓✓';
+        tickElement.classList.add('seen'); // Turns it blue
+    }
+});
+
+function appendMessage(text, sender, msgId) {
     const msgDiv = document.createElement('div');
     msgDiv.className = `msg ${sender}`;
-    msgDiv.innerText = text;
+    
+    let innerHTML = `<span>${text}</span>`;
+    
+    // Only add ticks if it's our own message
+    if (sender === 'me' && msgId) {
+        innerHTML += `
+            <div class="msg-meta">
+                <span id="tick-${msgId}" class="msg-status sent">✓</span>
+            </div>
+        `;
+    }
+
+    msgDiv.innerHTML = innerHTML;
     chatMessages.appendChild(msgDiv);
     chatMessages.scrollTop = chatMessages.scrollHeight;
 }
@@ -282,15 +283,11 @@ if (mobileBackBtn) {
     mobileBackBtn.addEventListener('click', () => appScreen.classList.remove('in-chat'));
 }
 
-// ==========================================
-// 5. ZERO-LOG VIDEO CALL LOGIC
-// ==========================================
-const rtcConfig = {
-    iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
-};
+// 6. VIDEO CALL LOGIC
+const rtcConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 
 async function setupWebRTC(targetEmail, isCaller) {
-    currentCallPeer = targetEmail.toLowerCase().trim();
+    currentCallPeer = targetEmail;
     try {
         localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
         localVideo.srcObject = localStream;
@@ -299,9 +296,7 @@ async function setupWebRTC(targetEmail, isCaller) {
         peerConnection = new RTCPeerConnection(rtcConfig);
         localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
 
-        peerConnection.ontrack = (event) => {
-            remoteVideo.srcObject = event.streams[0];
-        };
+        peerConnection.ontrack = (event) => { remoteVideo.srcObject = event.streams[0]; };
 
         peerConnection.onicecandidate = (event) => {
             if (event.candidate && currentCallPeer) {
@@ -315,73 +310,45 @@ async function setupWebRTC(targetEmail, isCaller) {
             socket.emit('webrtc-signal', { to: currentCallPeer, signal: { offer: offer } });
         }
     } catch (err) {
-        alert("Camera/Microphone permission denied: " + err.message);
+        alert("Camera/Mic denied.");
         closeCallUI();
     }
 }
 
 startCallBtn.addEventListener('click', () => {
     if (activeChatEmail) setupWebRTC(activeChatEmail, true);
-    else alert("Please select a chat first!");
 });
 
 socket.on('webrtc-signal', async (data) => {
-    if (!data || !data.from) return;
     const senderEmail = data.from.toLowerCase().trim();
-
     if (!peerConnection) {
         openChatWith(senderEmail);
         await setupWebRTC(senderEmail, false);
     }
-
     if (data.signal.offer) {
         await peerConnection.setRemoteDescription(new RTCSessionDescription(data.signal.offer));
         const answer = await peerConnection.createAnswer();
         await peerConnection.setLocalDescription(answer);
         socket.emit('webrtc-signal', { to: senderEmail, signal: { answer: answer } });
-    } 
-    else if (data.signal.answer) {
+    } else if (data.signal.answer) {
         await peerConnection.setRemoteDescription(new RTCSessionDescription(data.signal.answer));
-    } 
-    else if (data.signal.candidate) {
+    } else if (data.signal.candidate) {
         await peerConnection.addIceCandidate(new RTCIceCandidate(data.signal.candidate));
     }
 });
 
-micBtn.addEventListener('click', () => {
-    if (!localStream) return;
-    isAudioMuted = !isAudioMuted;
-    localStream.getAudioTracks().forEach(t => t.enabled = !isAudioMuted);
-    micBtn.innerText = isAudioMuted ? "Unmute Mic" : "Mute Mic";
-});
-
-camBtn.addEventListener('click', () => {
-    if (!localStream) return;
-    isVideoStopped = !isVideoStopped;
-    localStream.getVideoTracks().forEach(t => t.enabled = !isVideoStopped);
-    camBtn.innerText = isVideoStopped ? "Cam On" : "Cam Off";
-});
-
 endCallBtn.addEventListener('click', () => {
-    if (currentCallPeer) {
-        socket.emit('end-call', { to: currentCallPeer });
-    }
+    if (currentCallPeer) socket.emit('end-call', { to: currentCallPeer });
     closeCallUI();
 });
 
-socket.on('call-ended', () => {
-    closeCallUI();
-});
+socket.on('call-ended', () => closeCallUI());
 
 function closeCallUI() {
-    if (peerConnection) {
-        peerConnection.close();
-        peerConnection = null;
-    }
-    if (localStream) {
-        localStream.getTracks().forEach(track => track.stop());
-        localStream = null;
-    }
+    if (peerConnection) peerConnection.close();
+    if (localStream) localStream.getTracks().forEach(track => track.stop());
+    peerConnection = null;
+    localStream = null;
     currentCallPeer = null;
     videoOverlay.classList.add('hidden');
 }

@@ -324,3 +324,22 @@ body {
     .app-container.in-chat .sidebar { display: none; }
     .app-container.in-chat .chat-main { display: flex; width: 100%; }
 }
+/* MESSAGE STATUS TICKS */
+.msg-meta {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 4px;
+    margin-top: 5px;
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.msg-status {
+    font-size: 12px;
+    font-weight: bold;
+}
+
+.msg-status.sent { color: #8696a0; }
+.msg-status.delivered { color: #8696a0; }
+.msg-status.seen { color: #53bdeb; } /* Blue Ticks */
