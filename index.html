@@ -3,55 +3,82 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CryptoCall - Secure P2P Video & Chat</title>
+    <title>CryptoCall - Private Chat & Calls</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div class="container">
-        <header id="main-header">
-            <h1>🔒 CryptoCall</h1>
-            <p>End-to-End Encrypted Peer-to-Peer Video. No Phone Numbers. No Logs.</p>
-        </header>
-
-        <div id="setup-screen" class="card">
-            <div class="action-box">
-                <button id="create-btn" class="btn primary">Create Secure Room</button>
-            </div>
+    <div id="auth-screen" class="auth-container">
+        <div class="auth-card">
+            <h2>🔒 CryptoCall</h2>
+            <p>Private, End-to-End Encrypted Messaging & Calls</p>
             
-            <div class="divider"><span>OR</span></div>
-            
-            <div class="action-box">
-                <input type="text" id="room-input" placeholder="Enter Special Room Code">
-                <button id="join-btn" class="btn secondary">Join Room</button>
+            <div id="login-form">
+                <input type="email" id="auth-email" placeholder="Email Address">
+                <input type="password" id="auth-password" placeholder="Password">
+                <button id="login-btn" class="btn primary">Log In / Sign Up</button>
             </div>
         </div>
+    </div>
 
-        <div id="video-screen" class="card hidden">
-            <div class="room-info">
-                <span>Room Code: <strong id="display-room-code">...</strong></span>
+    <div id="app-screen" class="app-container hidden">
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="user-profile">
+                    <div class="avatar" id="my-avatar">U</div>
+                    <span id="my-email-display">user@cryptocall.com</span>
+                </div>
             </div>
-            
-            <div class="main-call-layout">
-                <div class="video-grid">
-                    <video id="remote-video" autoplay playsinline></video>
-                    
-                    <video id="local-video" autoplay playsinline muted></video>
-                    
-                    <div class="controls-bar">
-                        <button id="mic-btn" class="ctrl-btn">🎤 Mute Mic</button>
-                        <button id="cam-btn" class="ctrl-btn">📷 Turn Off Cam</button>
-                        <button id="leave-btn" class="ctrl-btn danger-btn">📞 End</button>
-                    </div>
-                </div>
 
-                <div class="chat-panel">
-                    <div class="chat-header">🔒 Encrypted Chat</div>
-                    <div id="chat-messages" class="chat-messages"></div>
-                    <div class="chat-input-area">
-                        <input type="text" id="chat-input" placeholder="Type a secure message...">
-                        <button id="send-chat-btn" class="btn primary">Send</button>
+            <div class="search-box">
+                <input type="text" id="search-input" placeholder="Search or type secret PIN...">
+            </div>
+
+            <div class="chat-list" id="chat-list">
+                <div class="chat-item active" data-email="peer@cryptocall.com">
+                    <div class="avatar">P</div>
+                    <div class="chat-info">
+                        <div class="chat-name">peer@cryptocall.com</div>
+                        <div class="chat-preview">Click to chat privately...</div>
                     </div>
                 </div>
+            </div>
+        </aside>
+
+        <main class="chat-main">
+            <div class="chat-header">
+                <div class="active-contact-info">
+                    <div class="avatar">P</div>
+                    <div>
+                        <h3 id="active-chat-email">peer@cryptocall.com</h3>
+                        <span class="status-online">Online</span>
+                    </div>
+                </div>
+                <div class="header-actions">
+                    <button id="start-call-btn" class="icon-btn" title="Start Video Call">📹</button>
+                </div>
+            </div>
+
+            <div class="message-area" id="chat-messages">
+                <div class="system-message">🔒 Messages are end-to-end encrypted. No call logs are saved.</div>
+            </div>
+
+            <div class="chat-input-container">
+                <input type="text" id="chat-input" placeholder="Type a message...">
+                <button id="send-btn" class="btn primary">Send</button>
+            </div>
+        </main>
+    </div>
+
+    <div id="video-overlay" class="video-overlay hidden">
+        <div class="video-container">
+            <video id="remote-video" autoplay playsinline></video>
+
+            <video id="local-video" autoplay playsinline muted></video>
+
+            <div class="call-controls">
+                <button id="mic-btn" class="ctrl-btn">🎤 Mute</button>
+                <button id="cam-btn" class="ctrl-btn">📷 Cam Off</button>
+                <button id="end-call-btn" class="ctrl-btn danger">📞 End Call</button>
             </div>
         </div>
     </div>
