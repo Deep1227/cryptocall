@@ -2,7 +2,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebas
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 // ==========================================
-// 1. PASTE YOUR FIREBASE CONFIG HERE!!
+// 1. FIREBASE CONFIG 
 // ==========================================
 const firebaseConfig = {
   apiKey: "AIzaSyA1bkUvt6PkFhR83bnHAPABbkgWijMyKsI",
@@ -82,9 +82,8 @@ onAuthStateChanged(auth, (user) => {
         authScreen.classList.add('hidden');
         appScreen.classList.remove('hidden');
         
-        // Tell the server we are online and ready to receive messages
         socket.emit('user-online', user.email);
-        chatList.innerHTML = ''; // Clear chat list on login
+        chatList.innerHTML = ''; 
     } else {
         authScreen.classList.remove('hidden');
         appScreen.classList.add('hidden');
@@ -94,8 +93,6 @@ onAuthStateChanged(auth, (user) => {
 // ==========================================
 // 4. CHAT & MESSAGING LOGIC
 // ==========================================
-
-// Search for an email to start chatting
 searchInput.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') {
         const targetEmail = searchInput.value.trim();
@@ -111,7 +108,6 @@ function openChatWith(email) {
     activeChatEmailDisplay.innerText = email;
     chatMessages.innerHTML = '<div class="system-message">🔒 Messages are end-to-end encrypted. No call logs are saved.</div>';
     
-    // Add to sidebar if not there
     if (!document.getElementById(`contact-${email}`)) {
         const chatItem = document.createElement('div');
         chatItem.className = 'chat-item active';
@@ -131,10 +127,9 @@ function openChatWith(email) {
         chatList.prepend(chatItem);
     }
     
-    appScreen.classList.add('in-chat'); // Mobile slide-in
+    appScreen.classList.add('in-chat'); 
 }
 
-// Send Text Message
 sendBtn.addEventListener('click', sendText);
 chatInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendText(); });
 
@@ -142,17 +137,13 @@ function sendText() {
     const text = chatInput.value.trim();
     if (!text || !activeChatEmail) return;
 
-    // Append our own message to the screen
     appendMessage(text, 'me');
     chatInput.value = '';
 
-    // Send securely to peer
     socket.emit('send-message', { to: activeChatEmail, text: text });
 }
 
-// Receive Text Message
 socket.on('receive-message', (data) => {
-    // If we aren't chatting with them, auto-open the chat
     if (activeChatEmail !== data.from) openChatWith(data.from);
     appendMessage(data.text, 'peer');
 });
@@ -225,7 +216,6 @@ socket.on('webrtc-signal', async (data) => {
     }
 });
 
-// Call Controls
 micBtn.addEventListener('click', () => {
     isAudioMuted = !isAudioMuted;
     localStream.getAudioTracks().forEach(t => t.enabled = !isAudioMuted);
