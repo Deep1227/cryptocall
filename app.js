@@ -1,13 +1,9 @@
-// Import modern Firebase tools directly from Google
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
-// Import the functions you need from the SDKs you need
-import { initializeApp } from "firebase/app";
-// TODO: Add SDKs for Firebase products that you want to use
-// https://firebase.google.com/docs/web/setup#available-libraries
-
-// Your web app's Firebase configuration
+// ==========================================
+// 1. PASTE YOUR FIREBASE CONFIG HERE!!
+// ==========================================
 const firebaseConfig = {
   apiKey: "AIzaSyA1bkUvt6PkFhR83bnHAPABbkgWijMyKsI",
   authDomain: "cryptocall-32dbb.firebaseapp.com",
@@ -17,11 +13,8 @@ const firebaseConfig = {
   appId: "1:469600735226:web:87e33d0ff912e24acc9e43"
 };
 
-// Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
-
-// Connect to our own Node.js Signaling Server for calls
 const socket = io();
 
 // ==========================================
@@ -35,27 +28,43 @@ const authPassword = document.getElementById('auth-password');
 const myEmailDisplay = document.getElementById('my-email-display');
 const myAvatar = document.getElementById('my-avatar');
 
-// Call / Chat Elements
-const chatItems = document.querySelectorAll('.chat-item');
+// Chat UI Elements
+const searchInput = document.getElementById('search-input');
+const chatList = document.getElementById('chat-list');
+const activeChatEmailDisplay = document.getElementById('active-chat-email');
+const chatMessages = document.getElementById('chat-messages');
+const chatInput = document.getElementById('chat-input');
+const sendBtn = document.getElementById('send-btn');
 const mobileBackBtn = document.getElementById('mobile-back-btn');
+
+// Video UI Elements
+const videoOverlay = document.getElementById('video-overlay');
+const localVideo = document.getElementById('local-video');
+const remoteVideo = document.getElementById('remote-video');
+const startCallBtn = document.getElementById('start-call-btn');
+const endCallBtn = document.getElementById('end-call-btn');
+const micBtn = document.getElementById('mic-btn');
+const camBtn = document.getElementById('cam-btn');
+
 let currentUser = null;
+let activeChatEmail = null; 
+let localStream = null;
+let peerConnection = null;
+let isAudioMuted = false;
+let isVideoStopped = false;
 
 // ==========================================
-// 3. AUTHENTICATION LOGIC (Smart Login)
+// 3. AUTHENTICATION LOGIC
 // ==========================================
 loginBtn.addEventListener('click', async () => {
     const email = authEmail.value.trim();
     const password = authPassword.value;
-    
     if (!email || !password) return alert("Please enter email and password");
-    
     loginBtn.innerText = "Connecting...";
 
     try {
-        // Try to log them in first
         await signInWithEmailAndPassword(auth, email, password);
     } catch (error) {
-        // If the account doesn't exist, create a new one instantly!
         try {
             await createUserWithEmailAndPassword(auth, email, password);
         } catch (createError) {
@@ -65,41 +74,183 @@ loginBtn.addEventListener('click', async () => {
     }
 });
 
-// Listen for Login/Logout events in real-time
 onAuthStateChanged(auth, (user) => {
     if (user) {
-        // User just logged in!
         currentUser = user;
-        
-        // Update the UI with their email and a generated Avatar letter
         myEmailDisplay.innerText = user.email;
         myAvatar.innerText = user.email.charAt(0).toUpperCase();
-        
-        // Hide Login Screen, Show Main App Screen
         authScreen.classList.add('hidden');
         appScreen.classList.remove('hidden');
         
-        // Tell our Node.js server we are online
+        // Tell the server we are online and ready to receive messages
         socket.emit('user-online', user.email);
+        chatList.innerHTML = ''; // Clear chat list on login
     } else {
-        // User is logged out
         authScreen.classList.remove('hidden');
         appScreen.classList.add('hidden');
     }
 });
 
+// ==========================================
+// 4. CHAT & MESSAGING LOGIC
+// ==========================================
 
-// ==========================================
-// 4. MOBILE UI SWIPE LOGIC
-// ==========================================
-chatItems.forEach(item => {
-    item.addEventListener('click', () => {
-        appScreen.classList.add('in-chat');
-    });
+// Search for an email to start chatting
+searchInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+        const targetEmail = searchInput.value.trim();
+        if (targetEmail && targetEmail !== currentUser.email) {
+            openChatWith(targetEmail);
+            searchInput.value = '';
+        }
+    }
 });
 
+function openChatWith(email) {
+    activeChatEmail = email;
+    activeChatEmailDisplay.innerText = email;
+    chatMessages.innerHTML = '<div class="system-message">🔒 Messages are end-to-end encrypted. No call logs are saved.</div>';
+    
+    // Add to sidebar if not there
+    if (!document.getElementById(`contact-${email}`)) {
+        const chatItem = document.createElement('div');
+        chatItem.className = 'chat-item active';
+        chatItem.id = `contact-${email}`;
+        chatItem.innerHTML = `
+            <div class="avatar">${email.charAt(0).toUpperCase()}</div>
+            <div class="chat-info">
+                <div class="chat-name">${email}</div>
+                <div class="chat-preview">Tap to chat...</div>
+            </div>
+        `;
+        chatItem.addEventListener('click', () => {
+            document.querySelectorAll('.chat-item').forEach(i => i.classList.remove('active'));
+            chatItem.classList.add('active');
+            openChatWith(email);
+        });
+        chatList.prepend(chatItem);
+    }
+    
+    appScreen.classList.add('in-chat'); // Mobile slide-in
+}
+
+// Send Text Message
+sendBtn.addEventListener('click', sendText);
+chatInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendText(); });
+
+function sendText() {
+    const text = chatInput.value.trim();
+    if (!text || !activeChatEmail) return;
+
+    // Append our own message to the screen
+    appendMessage(text, 'me');
+    chatInput.value = '';
+
+    // Send securely to peer
+    socket.emit('send-message', { to: activeChatEmail, text: text });
+}
+
+// Receive Text Message
+socket.on('receive-message', (data) => {
+    // If we aren't chatting with them, auto-open the chat
+    if (activeChatEmail !== data.from) openChatWith(data.from);
+    appendMessage(data.text, 'peer');
+});
+
+function appendMessage(text, sender) {
+    const msgDiv = document.createElement('div');
+    msgDiv.className = `msg ${sender}`;
+    msgDiv.innerText = text;
+    chatMessages.appendChild(msgDiv);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
 if (mobileBackBtn) {
-    mobileBackBtn.addEventListener('click', () => {
-        appScreen.classList.remove('in-chat');
-    });
+    mobileBackBtn.addEventListener('click', () => appScreen.classList.remove('in-chat'));
+}
+
+// ==========================================
+// 5. ZERO-LOG VIDEO CALL LOGIC
+// ==========================================
+const rtcConfig = {
+    iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+};
+
+async function setupWebRTC(targetEmail, isCaller) {
+    localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    localVideo.srcObject = localStream;
+    videoOverlay.classList.remove('hidden');
+
+    peerConnection = new RTCPeerConnection(rtcConfig);
+    localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+
+    peerConnection.ontrack = (event) => {
+        remoteVideo.srcObject = event.streams[0];
+    };
+
+    peerConnection.onicecandidate = (event) => {
+        if (event.candidate) {
+            socket.emit('webrtc-signal', { to: targetEmail, signal: { candidate: event.candidate } });
+        }
+    };
+
+    if (isCaller) {
+        const offer = await peerConnection.createOffer();
+        await peerConnection.setLocalDescription(offer);
+        socket.emit('webrtc-signal', { to: targetEmail, signal: { offer: offer } });
+    }
+}
+
+startCallBtn.addEventListener('click', () => {
+    if (activeChatEmail) setupWebRTC(activeChatEmail, true);
+});
+
+socket.on('webrtc-signal', async (data) => {
+    if (!peerConnection) {
+        activeChatEmail = data.from;
+        await setupWebRTC(data.from, false);
+    }
+
+    if (data.signal.offer) {
+        await peerConnection.setRemoteDescription(new RTCSessionDescription(data.signal.offer));
+        const answer = await peerConnection.createAnswer();
+        await peerConnection.setLocalDescription(answer);
+        socket.emit('webrtc-signal', { to: data.from, signal: { answer: answer } });
+    } 
+    else if (data.signal.answer) {
+        await peerConnection.setRemoteDescription(new RTCSessionDescription(data.signal.answer));
+    } 
+    else if (data.signal.candidate) {
+        await peerConnection.addIceCandidate(new RTCIceCandidate(data.signal.candidate));
+    }
+});
+
+// Call Controls
+micBtn.addEventListener('click', () => {
+    isAudioMuted = !isAudioMuted;
+    localStream.getAudioTracks().forEach(t => t.enabled = !isAudioMuted);
+    micBtn.innerText = isAudioMuted ? "🔇 Unmute" : "🎤 Mute";
+});
+
+camBtn.addEventListener('click', () => {
+    isVideoStopped = !isVideoStopped;
+    localStream.getVideoTracks().forEach(t => t.enabled = !isVideoStopped);
+    camBtn.innerText = isVideoStopped ? "📷 Cam On" : "📷 Cam Off";
+});
+
+endCallBtn.addEventListener('click', () => {
+    socket.emit('end-call', { to: activeChatEmail });
+    closeCallUI();
+});
+
+socket.on('call-ended', () => {
+    closeCallUI();
+});
+
+function closeCallUI() {
+    if (peerConnection) peerConnection.close();
+    if (localStream) localStream.getTracks().forEach(track => track.stop());
+    peerConnection = null;
+    localStream = null;
+    videoOverlay.classList.add('hidden');
 }
