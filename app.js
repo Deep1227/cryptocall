@@ -162,3 +162,21 @@ function sendTextMessage() {
 
 sendChatBtn.addEventListener('click', sendTextMessage);
 chatInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendTextMessage(); });
+// --- MOBILE NAVIGATION LOGIC ---
+const chatItems = document.querySelectorAll('.chat-item');
+const appContainer = document.getElementById('app-screen');
+const mobileBackBtn = document.getElementById('mobile-back-btn');
+
+// When you tap a chat, slide to the message view
+chatItems.forEach(item => {
+    item.addEventListener('click', () => {
+        appContainer.classList.add('in-chat');
+    });
+});
+
+// When you tap back, slide back to the chat list
+if (mobileBackBtn) {
+    mobileBackBtn.addEventListener('click', () => {
+        appContainer.classList.remove('in-chat');
+    });
+}

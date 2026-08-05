@@ -323,3 +323,12 @@ body {
     .app-container.in-chat .sidebar { display: none; }
     .app-container.in-chat .chat-main { display: flex; width: 100%; }
 }
+/* Inside your existing mobile responsive block */
+@media (max-width: 768px) {
+    .mobile-only { display: block !important; } /* ADD THIS LINE */
+    
+    .sidebar { width: 100%; }
+    .chat-main { display: none; }
+    .app-container.in-chat .sidebar { display: none; }
+    .app-container.in-chat .chat-main { display: flex; width: 100%; }
+}
