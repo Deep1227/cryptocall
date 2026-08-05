@@ -56,20 +56,30 @@ let peerConnection = null;
 let isAudioMuted = false;
 let isVideoStopped = false;
 
+// SAFE LOCAL STORAGE FETCHING (Prevents app crashes)
 let secretPIN = localStorage.getItem('cryptoPIN') || '1234'; 
-let hiddenEmails = JSON.parse(localStorage.getItem('hiddenEmails')) || [];
+let hiddenEmails = [];
 let isUnlocked = false;
+
+try {
+    const stored = localStorage.getItem('hiddenEmails');
+    if (stored) {
+        hiddenEmails = JSON.parse(stored);
+        if (!Array.isArray(hiddenEmails)) hiddenEmails = [];
+    }
+} catch (err) {
+    hiddenEmails = [];
+    localStorage.removeItem('hiddenEmails');
+}
 
 // ==========================================
 // 3. AUTHENTICATION & SOCKET RECONNECTION
 // ==========================================
 
-// NEW FIX: Always re-register with server if connection drops!
 socket.on('connect', () => {
     if (currentUser) {
         const normalizedEmail = currentUser.email.toLowerCase().trim();
         socket.emit('user-online', { email: normalizedEmail, uid: currentUser.uid });
-        console.log("Reconnected securely to server!");
     }
 });
 
@@ -134,7 +144,7 @@ searchInput.addEventListener('keypress', (e) => {
         if (text === secretPIN) {
             isUnlocked = true;
             searchInput.value = '';
-            searchInput.placeholder = "🔓 Unlocked! Search emails...";
+            searchInput.placeholder = "[Unlocked] Search emails...";
             hiddenEmails.forEach(email => openChatWith(email));
             return;
         }
@@ -162,7 +172,6 @@ searchInput.addEventListener('keypress', (e) => {
             return;
         }
 
-        // Only allow chat if user is currently online
         socket.emit('check-user-exists', targetEmail, (response) => {
             if (response && response.exists) {
                 openChatWith(targetEmail);
@@ -179,7 +188,9 @@ function openChatWith(email) {
     activeChatEmail = normalizedEmail;
     activeChatEmailDisplay.innerText = normalizedEmail;
     activeAvatar.innerText = normalizedEmail.charAt(0).toUpperCase();
-    chatMessages.innerHTML = '<div class="system-message">🔒 Messages are end-to-end encrypted. No call logs are saved.</div>';
+    
+    // Emoji removed to stop encoding errors
+    chatMessages.innerHTML = '<div class="system-message">[Encrypted] Messages are end-to-end encrypted. No call logs are saved.</div>';
     
     if (!document.getElementById(`contact-${normalizedEmail}`)) {
         if (!hiddenEmails.includes(normalizedEmail) || isUnlocked) {
@@ -201,7 +212,6 @@ function openChatWith(email) {
             chatList.prepend(chatItem);
         }
     }
-    
     appScreen.classList.add('in-chat'); 
 }
 
@@ -222,7 +232,7 @@ hideChatBtn.addEventListener('click', () => {
     activeAvatar.innerText = 'P';
     appScreen.classList.remove('in-chat'); 
     
-    alert("Ghost Mode Activated 👻. Chat hidden successfully!");
+    alert("Ghost Mode Activated. Chat hidden successfully!");
 });
 
 closeChatBtn.addEventListener('click', () => {
@@ -254,6 +264,7 @@ function sendText() {
 }
 
 socket.on('receive-message', (data) => {
+    if (!data || !data.from) return;
     const fromEmail = data.from.toLowerCase().trim();
     if (activeChatEmail !== fromEmail) openChatWith(fromEmail);
     appendMessage(data.text, 'peer');
@@ -311,10 +322,11 @@ async function setupWebRTC(targetEmail, isCaller) {
 
 startCallBtn.addEventListener('click', () => {
     if (activeChatEmail) setupWebRTC(activeChatEmail, true);
-    else alert("Pehle ek chat select karein!");
+    else alert("Please select a chat first!");
 });
 
 socket.on('webrtc-signal', async (data) => {
+    if (!data || !data.from) return;
     const senderEmail = data.from.toLowerCase().trim();
 
     if (!peerConnection) {
@@ -340,14 +352,14 @@ micBtn.addEventListener('click', () => {
     if (!localStream) return;
     isAudioMuted = !isAudioMuted;
     localStream.getAudioTracks().forEach(t => t.enabled = !isAudioMuted);
-    micBtn.innerText = isAudioMuted ? "🔇 Unmute" : "🎤 Mute";
+    micBtn.innerText = isAudioMuted ? "Unmute Mic" : "Mute Mic";
 });
 
 camBtn.addEventListener('click', () => {
     if (!localStream) return;
     isVideoStopped = !isVideoStopped;
     localStream.getVideoTracks().forEach(t => t.enabled = !isVideoStopped);
-    camBtn.innerText = isVideoStopped ? "📷 Cam On" : "📷 Cam Off";
+    camBtn.innerText = isVideoStopped ? "Cam On" : "Cam Off";
 });
 
 endCallBtn.addEventListener('click', () => {
