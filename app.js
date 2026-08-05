@@ -180,3 +180,20 @@ if (mobileBackBtn) {
         appContainer.classList.remove('in-chat');
     });
 }
+// Import the functions you need from the SDKs you need
+import { initializeApp } from "firebase/app";
+// TODO: Add SDKs for Firebase products that you want to use
+// https://firebase.google.com/docs/web/setup#available-libraries
+
+// Your web app's Firebase configuration
+const firebaseConfig = {
+  apiKey: "AIzaSyA1bkUvt6PkFhR83bnHAPABbkgWijMyKsI",
+  authDomain: "cryptocall-32dbb.firebaseapp.com",
+  projectId: "cryptocall-32dbb",
+  storageBucket: "cryptocall-32dbb.firebasestorage.app",
+  messagingSenderId: "469600735226",
+  appId: "1:469600735226:web:87e33d0ff912e24acc9e43"
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
