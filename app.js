@@ -1,185 +1,7 @@
-const socket = io();
+// Import modern Firebase tools directly from Google
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
-const setupScreen = document.getElementById('setup-screen');
-const videoScreen = document.getElementById('video-screen');
-const mainHeader = document.getElementById('main-header');
-const createBtn = document.getElementById('create-btn');
-const joinBtn = document.getElementById('join-btn');
-const leaveBtn = document.getElementById('leave-btn');
-const roomInput = document.getElementById('room-input');
-const displayRoomCode = document.getElementById('display-room-code');
-const localVideo = document.getElementById('local-video');
-const remoteVideo = document.getElementById('remote-video');
-const micBtn = document.getElementById('mic-btn');
-const camBtn = document.getElementById('cam-btn');
-const chatInput = document.getElementById('chat-input');
-const sendChatBtn = document.getElementById('send-chat-btn');
-const chatMessages = document.getElementById('chat-messages');
-
-let localStream = null;
-let peerConnection = null;
-let dataChannel = null; // NEW: Direct P2P text channel
-let currentRoom = null;
-let isAudioMuted = false;
-let isVideoStopped = false;
-
-const rtcConfig = {
-    iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' }
-    ]
-};
-
-function generateRoomCode() {
-    return Math.random().toString(36).substring(2, 10);
-}
-
-async function startLocalVideo() {
-    localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-    localVideo.srcObject = localStream;
-}
-
-function createPeerConnection(peerId) {
-    peerConnection = new RTCPeerConnection(rtcConfig);
-
-    localStream.getTracks().forEach(track => {
-        peerConnection.addTrack(track, localStream);
-    });
-
-    peerConnection.ontrack = (event) => {
-        remoteVideo.srcObject = event.streams[0];
-    };
-
-    peerConnection.onicecandidate = (event) => {
-        if (event.candidate) {
-            socket.emit('signal', { to: peerId, signal: { candidate: event.candidate } });
-        }
-    };
-
-    // NEW: Create Data Channel for instant chat
-    dataChannel = peerConnection.createDataChannel('chat');
-    setupDataChannel(dataChannel);
-
-    // NEW: Listen for peer's Data Channel
-    peerConnection.ondatachannel = (event) => {
-        setupDataChannel(event.channel);
-    };
-}
-
-// NEW: Handle instant P2P messages
-function setupDataChannel(channel) {
-    channel.onmessage = (event) => {
-        appendMessage(event.data, 'peer');
-    };
-}
-
-createBtn.addEventListener('click', async () => {
-    currentRoom = generateRoomCode();
-    displayRoomCode.innerText = currentRoom;
-    await startLocalVideo();
-    setupScreen.classList.add('hidden');
-    mainHeader.classList.add('hidden');
-    videoScreen.classList.remove('hidden');
-    socket.emit('join-room', currentRoom);
-});
-
-joinBtn.addEventListener('click', async () => {
-    const code = roomInput.value.trim();
-    if (!code) return;
-    currentRoom = code;
-    displayRoomCode.innerText = currentRoom;
-    await startLocalVideo();
-    setupScreen.classList.add('hidden');
-    mainHeader.classList.add('hidden');
-    videoScreen.classList.remove('hidden');
-    socket.emit('join-room', currentRoom);
-});
-
-socket.on('user-joined', async (peerId) => {
-    createPeerConnection(peerId);
-    const offer = await peerConnection.createOffer();
-    await peerConnection.setLocalDescription(offer);
-    socket.emit('signal', { to: peerId, signal: { offer: offer } });
-});
-
-socket.on('signal', async (data) => {
-    if (!peerConnection) createPeerConnection(data.from);
-
-    if (data.signal.offer) {
-        await peerConnection.setRemoteDescription(new RTCSessionDescription(data.signal.offer));
-        const answer = await peerConnection.createAnswer();
-        await peerConnection.setLocalDescription(answer);
-        socket.emit('signal', { to: data.from, signal: { answer: answer } });
-    } 
-    else if (data.signal.answer) {
-        await peerConnection.setRemoteDescription(new RTCSessionDescription(data.signal.answer));
-    } 
-    else if (data.signal.candidate) {
-        await peerConnection.addIceCandidate(new RTCIceCandidate(data.signal.candidate));
-    }
-});
-
-// NEW: Listen for ghost call fix
-socket.on('peer-disconnected', () => {
-    alert("The other person has left the call.");
-    window.location.reload(); 
-});
-
-micBtn.addEventListener('click', () => {
-    isAudioMuted = !isAudioMuted;
-    localStream.getAudioTracks().forEach(t => t.enabled = !isAudioMuted);
-    micBtn.innerText = isAudioMuted ? "🔇 Unmute" : "🎤 Mute";
-    micBtn.classList.toggle('off-state', isAudioMuted);
-});
-
-camBtn.addEventListener('click', () => {
-    isVideoStopped = !isVideoStopped;
-    localStream.getVideoTracks().forEach(t => t.enabled = !isVideoStopped);
-    camBtn.innerText = isVideoStopped ? "📷 Cam Off" : "📷 Cam On";
-    camBtn.classList.toggle('off-state', isVideoStopped);
-});
-
-leaveBtn.addEventListener('click', () => window.location.reload());
-
-function appendMessage(text, sender) {
-    const msgDiv = document.createElement('div');
-    msgDiv.classList.add('msg', sender);
-    msgDiv.innerText = text;
-    chatMessages.appendChild(msgDiv);
-    chatMessages.scrollTop = chatMessages.scrollHeight;
-}
-
-// UPGRADED: Instant Chat sending
-function sendTextMessage() {
-    const text = chatInput.value.trim();
-    if (!text) return;
-    appendMessage(text, 'me');
-    chatInput.value = '';
-    if (dataChannel && dataChannel.readyState === 'open') {
-        dataChannel.send(text);
-    }
-}
-
-sendChatBtn.addEventListener('click', sendTextMessage);
-chatInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendTextMessage(); });
-// --- MOBILE NAVIGATION LOGIC ---
-const chatItems = document.querySelectorAll('.chat-item');
-const appContainer = document.getElementById('app-screen');
-const mobileBackBtn = document.getElementById('mobile-back-btn');
-
-// When you tap a chat, slide to the message view
-chatItems.forEach(item => {
-    item.addEventListener('click', () => {
-        appContainer.classList.add('in-chat');
-    });
-});
-
-// When you tap back, slide back to the chat list
-if (mobileBackBtn) {
-    mobileBackBtn.addEventListener('click', () => {
-        appContainer.classList.remove('in-chat');
-    });
-}
 // Import the functions you need from the SDKs you need
 import { initializeApp } from "firebase/app";
 // TODO: Add SDKs for Firebase products that you want to use
@@ -197,3 +19,87 @@ const firebaseConfig = {
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+
+// Connect to our own Node.js Signaling Server for calls
+const socket = io();
+
+// ==========================================
+// 2. UI ELEMENTS
+// ==========================================
+const authScreen = document.getElementById('auth-screen');
+const appScreen = document.getElementById('app-screen');
+const loginBtn = document.getElementById('login-btn');
+const authEmail = document.getElementById('auth-email');
+const authPassword = document.getElementById('auth-password');
+const myEmailDisplay = document.getElementById('my-email-display');
+const myAvatar = document.getElementById('my-avatar');
+
+// Call / Chat Elements
+const chatItems = document.querySelectorAll('.chat-item');
+const mobileBackBtn = document.getElementById('mobile-back-btn');
+let currentUser = null;
+
+// ==========================================
+// 3. AUTHENTICATION LOGIC (Smart Login)
+// ==========================================
+loginBtn.addEventListener('click', async () => {
+    const email = authEmail.value.trim();
+    const password = authPassword.value;
+    
+    if (!email || !password) return alert("Please enter email and password");
+    
+    loginBtn.innerText = "Connecting...";
+
+    try {
+        // Try to log them in first
+        await signInWithEmailAndPassword(auth, email, password);
+    } catch (error) {
+        // If the account doesn't exist, create a new one instantly!
+        try {
+            await createUserWithEmailAndPassword(auth, email, password);
+        } catch (createError) {
+            alert("Error: " + createError.message);
+            loginBtn.innerText = "Log In / Sign Up";
+        }
+    }
+});
+
+// Listen for Login/Logout events in real-time
+onAuthStateChanged(auth, (user) => {
+    if (user) {
+        // User just logged in!
+        currentUser = user;
+        
+        // Update the UI with their email and a generated Avatar letter
+        myEmailDisplay.innerText = user.email;
+        myAvatar.innerText = user.email.charAt(0).toUpperCase();
+        
+        // Hide Login Screen, Show Main App Screen
+        authScreen.classList.add('hidden');
+        appScreen.classList.remove('hidden');
+        
+        // Tell our Node.js server we are online
+        socket.emit('user-online', user.email);
+    } else {
+        // User is logged out
+        authScreen.classList.remove('hidden');
+        appScreen.classList.add('hidden');
+    }
+});
+
+
+// ==========================================
+// 4. MOBILE UI SWIPE LOGIC
+// ==========================================
+chatItems.forEach(item => {
+    item.addEventListener('click', () => {
+        appScreen.classList.add('in-chat');
+    });
+});
+
+if (mobileBackBtn) {
+    mobileBackBtn.addEventListener('click', () => {
+        appScreen.classList.remove('in-chat');
+    });
+}
