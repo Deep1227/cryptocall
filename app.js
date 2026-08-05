@@ -37,6 +37,7 @@ const chatInput = document.getElementById('chat-input');
 const sendBtn = document.getElementById('send-btn');
 const mobileBackBtn = document.getElementById('mobile-back-btn');
 const hideChatBtn = document.getElementById('hide-chat-btn');
+const closeChatBtn = document.getElementById('close-chat-btn'); // New Trash Button
 
 const videoOverlay = document.getElementById('video-overlay');
 const localVideo = document.getElementById('local-video');
@@ -123,8 +124,13 @@ searchInput.addEventListener('keypress', (e) => {
             return;
         }
 
-        // Standard Email Search
+        // Standard Email Search (With Slash Safeguard)
         if (text && text !== currentUser.email) {
+            if (text.startsWith('/')) {
+                alert("Invalid command! Type your PIN to unlock, or /pin to change it.");
+                searchInput.value = '';
+                return;
+            }
             openChatWith(text);
             searchInput.value = '';
         }
@@ -162,7 +168,7 @@ function openChatWith(email) {
     appScreen.classList.add('in-chat'); 
 }
 
-// Hide the current active chat
+// 👻 Hide the current active chat
 hideChatBtn.addEventListener('click', () => {
     if (!activeChatEmail) return;
     
@@ -181,6 +187,26 @@ hideChatBtn.addEventListener('click', () => {
     appScreen.classList.remove('in-chat'); 
     
     alert("Ghost Mode Activated 👻. Chat is hidden. Type your PIN in the search bar to reveal it.");
+});
+
+// 🗑️ Permanently Delete a chat
+closeChatBtn.addEventListener('click', () => {
+    if (!activeChatEmail) return;
+
+    // Remove from UI
+    const chatNode = document.getElementById(`contact-${activeChatEmail}`);
+    if (chatNode) chatNode.remove();
+
+    // Remove from Ghost Vault just in case
+    hiddenEmails = hiddenEmails.filter(email => email !== activeChatEmail);
+    localStorage.setItem('hiddenEmails', JSON.stringify(hiddenEmails));
+
+    // Clear main screen
+    activeChatEmail = null;
+    chatMessages.innerHTML = '';
+    activeChatEmailDisplay.innerText = 'Select a chat';
+    activeAvatar.innerText = 'P';
+    appScreen.classList.remove('in-chat');
 });
 
 // Messaging
