@@ -18,7 +18,7 @@ const auth = getAuth(app);
 const socket = io();
 
 // ==========================================
-// 2. UI ELEMENTS
+// 2. UI ELEMENTS & STATE
 // ==========================================
 const authScreen = document.getElementById('auth-screen');
 const appScreen = document.getElementById('app-screen');
@@ -28,16 +28,16 @@ const authPassword = document.getElementById('auth-password');
 const myEmailDisplay = document.getElementById('my-email-display');
 const myAvatar = document.getElementById('my-avatar');
 
-// Chat UI Elements
 const searchInput = document.getElementById('search-input');
 const chatList = document.getElementById('chat-list');
 const activeChatEmailDisplay = document.getElementById('active-chat-email');
+const activeAvatar = document.getElementById('active-avatar');
 const chatMessages = document.getElementById('chat-messages');
 const chatInput = document.getElementById('chat-input');
 const sendBtn = document.getElementById('send-btn');
 const mobileBackBtn = document.getElementById('mobile-back-btn');
+const hideChatBtn = document.getElementById('hide-chat-btn');
 
-// Video UI Elements
 const videoOverlay = document.getElementById('video-overlay');
 const localVideo = document.getElementById('local-video');
 const remoteVideo = document.getElementById('remote-video');
@@ -52,6 +52,11 @@ let localStream = null;
 let peerConnection = null;
 let isAudioMuted = false;
 let isVideoStopped = false;
+
+// Stealth Mode State
+let secretPIN = localStorage.getItem('cryptoPIN') || '1234'; 
+let hiddenEmails = JSON.parse(localStorage.getItem('hiddenEmails')) || [];
+let isUnlocked = false;
 
 // ==========================================
 // 3. AUTHENTICATION LOGIC
@@ -91,13 +96,36 @@ onAuthStateChanged(auth, (user) => {
 });
 
 // ==========================================
-// 4. CHAT & MESSAGING LOGIC
+// 4. CHAT, SEARCH & STEALTH PIN LOGIC
 // ==========================================
 searchInput.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') {
-        const targetEmail = searchInput.value.trim();
-        if (targetEmail && targetEmail !== currentUser.email) {
-            openChatWith(targetEmail);
+        const text = searchInput.value.trim();
+
+        // Check if unlocking hidden chats
+        if (text === secretPIN) {
+            isUnlocked = true;
+            searchInput.value = '';
+            searchInput.placeholder = "🔓 Unlocked! Search emails...";
+            hiddenEmails.forEach(email => openChatWith(email));
+            return;
+        }
+
+        // Check if changing PIN
+        if (text.startsWith('/pin ')) {
+            const newPin = text.split(' ')[1];
+            if (newPin && newPin.length >= 4) {
+                secretPIN = newPin;
+                localStorage.setItem('cryptoPIN', secretPIN);
+                alert(`Secret PIN successfully changed to: ${secretPIN}`);
+                searchInput.value = '';
+            }
+            return;
+        }
+
+        // Standard Email Search
+        if (text && text !== currentUser.email) {
+            openChatWith(text);
             searchInput.value = '';
         }
     }
@@ -106,30 +134,56 @@ searchInput.addEventListener('keypress', (e) => {
 function openChatWith(email) {
     activeChatEmail = email;
     activeChatEmailDisplay.innerText = email;
+    activeAvatar.innerText = email.charAt(0).toUpperCase();
     chatMessages.innerHTML = '<div class="system-message">🔒 Messages are end-to-end encrypted. No call logs are saved.</div>';
     
+    // Create Sidebar item if it's not hidden (or if we are unlocked)
     if (!document.getElementById(`contact-${email}`)) {
-        const chatItem = document.createElement('div');
-        chatItem.className = 'chat-item active';
-        chatItem.id = `contact-${email}`;
-        chatItem.innerHTML = `
-            <div class="avatar">${email.charAt(0).toUpperCase()}</div>
-            <div class="chat-info">
-                <div class="chat-name">${email}</div>
-                <div class="chat-preview">Tap to chat...</div>
-            </div>
-        `;
-        chatItem.addEventListener('click', () => {
-            document.querySelectorAll('.chat-item').forEach(i => i.classList.remove('active'));
-            chatItem.classList.add('active');
-            openChatWith(email);
-        });
-        chatList.prepend(chatItem);
+        if (!hiddenEmails.includes(email) || isUnlocked) {
+            const chatItem = document.createElement('div');
+            chatItem.className = 'chat-item active';
+            chatItem.id = `contact-${email}`;
+            chatItem.innerHTML = `
+                <div class="avatar">${email.charAt(0).toUpperCase()}</div>
+                <div class="chat-info">
+                    <div class="chat-name">${email}</div>
+                    <div class="chat-preview">Tap to chat...</div>
+                </div>
+            `;
+            chatItem.addEventListener('click', () => {
+                document.querySelectorAll('.chat-item').forEach(i => i.classList.remove('active'));
+                chatItem.classList.add('active');
+                openChatWith(email);
+            });
+            chatList.prepend(chatItem);
+        }
     }
     
     appScreen.classList.add('in-chat'); 
 }
 
+// Hide the current active chat
+hideChatBtn.addEventListener('click', () => {
+    if (!activeChatEmail) return;
+    
+    if (!hiddenEmails.includes(activeChatEmail)) {
+        hiddenEmails.push(activeChatEmail);
+        localStorage.setItem('hiddenEmails', JSON.stringify(hiddenEmails));
+    }
+    
+    const chatNode = document.getElementById(`contact-${activeChatEmail}`);
+    if (chatNode) chatNode.remove();
+    
+    activeChatEmail = null;
+    chatMessages.innerHTML = '';
+    activeChatEmailDisplay.innerText = 'Select a chat';
+    activeAvatar.innerText = 'P';
+    appScreen.classList.remove('in-chat'); 
+    
+    alert("Ghost Mode Activated 👻. Chat is hidden. Type your PIN in the search bar to reveal it.");
+});
+
+// Messaging
 sendBtn.addEventListener('click', sendText);
 chatInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendText(); });
 
@@ -139,7 +193,6 @@ function sendText() {
 
     appendMessage(text, 'me');
     chatInput.value = '';
-
     socket.emit('send-message', { to: activeChatEmail, text: text });
 }
 

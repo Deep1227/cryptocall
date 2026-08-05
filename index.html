@@ -34,27 +34,21 @@
             </div>
 
             <div class="chat-list" id="chat-list">
-                <div class="chat-item active" data-email="peer@cryptocall.com">
-                    <div class="avatar">P</div>
-                    <div class="chat-info">
-                        <div class="chat-name">peer@cryptocall.com</div>
-                        <div class="chat-preview">Click to chat privately...</div>
-                    </div>
                 </div>
-            </div>
         </aside>
 
         <main class="chat-main">
             <div class="chat-header">
                 <div class="active-contact-info">
                     <button id="mobile-back-btn" class="icon-btn mobile-only hidden">⬅️</button>
-                    <div class="avatar">P</div>
+                    <div class="avatar" id="active-avatar">P</div>
                     <div>
-                        <h3 id="active-chat-email">peer@cryptocall.com</h3>
+                        <h3 id="active-chat-email">Select a chat</h3>
                         <span class="status-online">Online</span>
                     </div>
                 </div>
                 <div class="header-actions">
+                    <button id="hide-chat-btn" class="icon-btn" title="Hide Chat">👻</button>
                     <button id="start-call-btn" class="icon-btn" title="Start Video Call">📹</button>
                 </div>
             </div>
