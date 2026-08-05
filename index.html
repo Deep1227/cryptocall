@@ -6,7 +6,6 @@
     <title>CryptoCall - Private Chat & Calls</title>
     
     <link rel="stylesheet" href="style.css">
-    
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#00a884">
 </head>
@@ -33,10 +32,11 @@
                     <div class="avatar" id="my-avatar">U</div>
                     <span id="my-email-display">user@cryptocall.com</span>
                 </div>
+                <button id="logout-btn" class="icon-btn logout-icon" title="Logout">🚪</button>
             </div>
 
             <div class="search-box">
-                <input type="text" id="search-input" placeholder="Search or type secret PIN...">
+                <input type="text" id="search-input" placeholder="Search registered email or type PIN...">
             </div>
 
             <div class="chat-list" id="chat-list">
@@ -75,7 +75,6 @@
     <div id="video-overlay" class="video-overlay hidden">
         <div class="video-container">
             <video id="remote-video" autoplay playsinline></video>
-
             <video id="local-video" autoplay playsinline muted></video>
 
             <div class="call-controls">

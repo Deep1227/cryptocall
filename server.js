@@ -5,23 +5,33 @@ const io = require('socket.io')(http);
 
 app.use(express.static(__dirname));
 
-// STEALTH MEMORY: Maps emails to current network connections. 
-// Wipes instantly when someone disconnects. No database used.
-const onlineUsers = {}; 
-const socketToEmail = {};
+// Network mappings
+const onlineUsers = {}; // email -> socket.id
+const socketToEmail = {}; // socket.id -> email
+const registeredUsers = new Set(); // Registered email list
 
 io.on('connection', (socket) => {
     
-    // 1. User logs in and comes online
-    socket.on('user-online', (email) => {
+    // 1. User comes online with Unique UID and Email
+    socket.on('user-online', (data) => {
+        const email = data.email.toLowerCase().trim();
         onlineUsers[email] = socket.id;
         socketToEmail[socket.id] = email;
-        console.log(`🔒 ${email} is online and secured.`);
+        registeredUsers.add(email);
+        console.log(`🔒 User Online: ${email} | UID: ${data.uid}`);
     });
 
-    // 2. Route Text Messages (Instant P2P)
+    // 2. Check if user exists before creating chat
+    socket.on('check-user-exists', (email, callback) => {
+        const targetEmail = email.toLowerCase().trim();
+        const exists = registeredUsers.has(targetEmail);
+        callback({ exists: exists });
+    });
+
+    // 3. Route Text Messages
     socket.on('send-message', (data) => {
-        const targetSocket = onlineUsers[data.to];
+        const toEmail = data.to.toLowerCase().trim();
+        const targetSocket = onlineUsers[toEmail];
         if (targetSocket) {
             io.to(targetSocket).emit('receive-message', {
                 from: socketToEmail[socket.id],
@@ -30,9 +40,10 @@ io.on('connection', (socket) => {
         }
     });
 
-    // 3. Route Video Call Signals
+    // 4. Route WebRTC Video Call Signals
     socket.on('webrtc-signal', (data) => {
-        const targetSocket = onlineUsers[data.to];
+        const toEmail = data.to.toLowerCase().trim();
+        const targetSocket = onlineUsers[toEmail];
         if (targetSocket) {
             io.to(targetSocket).emit('webrtc-signal', {
                 from: socketToEmail[socket.id],
@@ -41,11 +52,14 @@ io.on('connection', (socket) => {
         }
     });
 
-    // 4. Handle Disconnects & Hangups
+    // 5. Sync Call Ending across both sides
     socket.on('end-call', (data) => {
-        const targetSocket = onlineUsers[data.to];
-        if (targetSocket) {
-            io.to(targetSocket).emit('call-ended');
+        if (data && data.to) {
+            const toEmail = data.to.toLowerCase().trim();
+            const targetSocket = onlineUsers[toEmail];
+            if (targetSocket) {
+                io.to(targetSocket).emit('call-ended');
+            }
         }
     });
 
@@ -54,7 +68,7 @@ io.on('connection', (socket) => {
         if (email) {
             delete onlineUsers[email];
             delete socketToEmail[socket.id];
-            console.log(`💨 ${email} vanished from network.`);
+            console.log(`💨 ${email} disconnected.`);
         }
     });
 });

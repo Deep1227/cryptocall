@@ -1,8 +1,8 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 // ==========================================
-// 1. FIREBASE CONFIG 
+// 1. FIREBASE CONFIG
 // ==========================================
 const firebaseConfig = {
   apiKey: "AIzaSyA1bkUvt6PkFhR83bnHAPABbkgWijMyKsI",
@@ -23,6 +23,7 @@ const socket = io();
 const authScreen = document.getElementById('auth-screen');
 const appScreen = document.getElementById('app-screen');
 const loginBtn = document.getElementById('login-btn');
+const logoutBtn = document.getElementById('logout-btn');
 const authEmail = document.getElementById('auth-email');
 const authPassword = document.getElementById('auth-password');
 const myEmailDisplay = document.getElementById('my-email-display');
@@ -37,7 +38,7 @@ const chatInput = document.getElementById('chat-input');
 const sendBtn = document.getElementById('send-btn');
 const mobileBackBtn = document.getElementById('mobile-back-btn');
 const hideChatBtn = document.getElementById('hide-chat-btn');
-const closeChatBtn = document.getElementById('close-chat-btn'); // New Trash Button
+const closeChatBtn = document.getElementById('close-chat-btn');
 
 const videoOverlay = document.getElementById('video-overlay');
 const localVideo = document.getElementById('local-video');
@@ -49,6 +50,7 @@ const camBtn = document.getElementById('cam-btn');
 
 let currentUser = null;
 let activeChatEmail = null; 
+let currentCallPeer = null; // Explicit call peer tracking
 let localStream = null;
 let peerConnection = null;
 let isAudioMuted = false;
@@ -60,10 +62,10 @@ let hiddenEmails = JSON.parse(localStorage.getItem('hiddenEmails')) || [];
 let isUnlocked = false;
 
 // ==========================================
-// 3. AUTHENTICATION LOGIC
+// 3. AUTHENTICATION & LOGOUT LOGIC
 // ==========================================
 loginBtn.addEventListener('click', async () => {
-    const email = authEmail.value.trim();
+    const email = authEmail.value.trim().toLowerCase();
     const password = authPassword.value;
     if (!email || !password) return alert("Please enter email and password");
     loginBtn.innerText = "Connecting...";
@@ -80,15 +82,33 @@ loginBtn.addEventListener('click', async () => {
     }
 });
 
+// Logout functionality
+logoutBtn.addEventListener('click', async () => {
+    try {
+        await signOut(auth);
+        activeChatEmail = null;
+        currentUser = null;
+        chatList.innerHTML = '';
+        chatMessages.innerHTML = '';
+        alert("Logged out successfully!");
+    } catch (err) {
+        alert("Logout error: " + err.message);
+    }
+});
+
 onAuthStateChanged(auth, (user) => {
     if (user) {
         currentUser = user;
-        myEmailDisplay.innerText = user.email;
-        myAvatar.innerText = user.email.charAt(0).toUpperCase();
+        const normalizedEmail = user.email.toLowerCase().trim();
+        myEmailDisplay.innerText = normalizedEmail;
+        myAvatar.innerText = normalizedEmail.charAt(0).toUpperCase();
+        
         authScreen.classList.add('hidden');
         appScreen.classList.remove('hidden');
-        
-        socket.emit('user-online', user.email);
+        loginBtn.innerText = "Log In / Sign Up";
+
+        // Emit unique UID & normalized email
+        socket.emit('user-online', { email: normalizedEmail, uid: user.uid });
         chatList.innerHTML = ''; 
     } else {
         authScreen.classList.remove('hidden');
@@ -97,13 +117,14 @@ onAuthStateChanged(auth, (user) => {
 });
 
 // ==========================================
-// 4. CHAT, SEARCH & STEALTH PIN LOGIC
+// 4. CHAT, SEARCH & STEALTH LOGIC
 // ==========================================
 searchInput.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') {
         const text = searchInput.value.trim();
+        if (!text) return;
 
-        // Check if unlocking hidden chats
+        // PIN unlock check
         if (text === secretPIN) {
             isUnlocked = true;
             searchInput.value = '';
@@ -112,7 +133,7 @@ searchInput.addEventListener('keypress', (e) => {
             return;
         }
 
-        // Check if changing PIN
+        // PIN change command
         if (text.startsWith('/pin ')) {
             const newPin = text.split(' ')[1];
             if (newPin && newPin.length >= 4) {
@@ -124,42 +145,53 @@ searchInput.addEventListener('keypress', (e) => {
             return;
         }
 
-        // Standard Email Search (With Slash Safeguard)
-        if (text && text !== currentUser.email) {
-            if (text.startsWith('/')) {
-                alert("Invalid command! Type your PIN to unlock, or /pin to change it.");
-                searchInput.value = '';
-                return;
-            }
-            openChatWith(text);
+        if (text.startsWith('/')) {
+            alert("Invalid command! Type your PIN to unlock, or /pin to change it.");
             searchInput.value = '';
+            return;
         }
+
+        const targetEmail = text.toLowerCase().trim();
+        if (targetEmail === currentUser.email.toLowerCase().trim()) {
+            alert("Aap khud ko message nahi kar sakte!");
+            return;
+        }
+
+        // Check if target user actually exists on server
+        socket.emit('check-user-exists', targetEmail, (response) => {
+            if (response && response.exists) {
+                openChatWith(targetEmail);
+                searchInput.value = '';
+            } else {
+                alert(`User '${targetEmail}' exist nahi karta hai! User online ya registered hona chahiye.`);
+            }
+        });
     }
 });
 
 function openChatWith(email) {
-    activeChatEmail = email;
-    activeChatEmailDisplay.innerText = email;
-    activeAvatar.innerText = email.charAt(0).toUpperCase();
+    const normalizedEmail = email.toLowerCase().trim();
+    activeChatEmail = normalizedEmail;
+    activeChatEmailDisplay.innerText = normalizedEmail;
+    activeAvatar.innerText = normalizedEmail.charAt(0).toUpperCase();
     chatMessages.innerHTML = '<div class="system-message">🔒 Messages are end-to-end encrypted. No call logs are saved.</div>';
     
-    // Create Sidebar item if it's not hidden (or if we are unlocked)
-    if (!document.getElementById(`contact-${email}`)) {
-        if (!hiddenEmails.includes(email) || isUnlocked) {
+    if (!document.getElementById(`contact-${normalizedEmail}`)) {
+        if (!hiddenEmails.includes(normalizedEmail) || isUnlocked) {
             const chatItem = document.createElement('div');
             chatItem.className = 'chat-item active';
-            chatItem.id = `contact-${email}`;
+            chatItem.id = `contact-${normalizedEmail}`;
             chatItem.innerHTML = `
-                <div class="avatar">${email.charAt(0).toUpperCase()}</div>
+                <div class="avatar">${normalizedEmail.charAt(0).toUpperCase()}</div>
                 <div class="chat-info">
-                    <div class="chat-name">${email}</div>
+                    <div class="chat-name">${normalizedEmail}</div>
                     <div class="chat-preview">Tap to chat...</div>
                 </div>
             `;
             chatItem.addEventListener('click', () => {
                 document.querySelectorAll('.chat-item').forEach(i => i.classList.remove('active'));
                 chatItem.classList.add('active');
-                openChatWith(email);
+                openChatWith(normalizedEmail);
             });
             chatList.prepend(chatItem);
         }
@@ -168,7 +200,7 @@ function openChatWith(email) {
     appScreen.classList.add('in-chat'); 
 }
 
-// 👻 Hide the current active chat
+// Hide chat (Ghost Mode)
 hideChatBtn.addEventListener('click', () => {
     if (!activeChatEmail) return;
     
@@ -186,22 +218,19 @@ hideChatBtn.addEventListener('click', () => {
     activeAvatar.innerText = 'P';
     appScreen.classList.remove('in-chat'); 
     
-    alert("Ghost Mode Activated 👻. Chat is hidden. Type your PIN in the search bar to reveal it.");
+    alert("Ghost Mode Activated 👻. Chat hidden successfully!");
 });
 
-// 🗑️ Permanently Delete a chat
+// Delete chat
 closeChatBtn.addEventListener('click', () => {
     if (!activeChatEmail) return;
 
-    // Remove from UI
     const chatNode = document.getElementById(`contact-${activeChatEmail}`);
     if (chatNode) chatNode.remove();
 
-    // Remove from Ghost Vault just in case
     hiddenEmails = hiddenEmails.filter(email => email !== activeChatEmail);
     localStorage.setItem('hiddenEmails', JSON.stringify(hiddenEmails));
 
-    // Clear main screen
     activeChatEmail = null;
     chatMessages.innerHTML = '';
     activeChatEmailDisplay.innerText = 'Select a chat';
@@ -223,7 +252,8 @@ function sendText() {
 }
 
 socket.on('receive-message', (data) => {
-    if (activeChatEmail !== data.from) openChatWith(data.from);
+    const fromEmail = data.from.toLowerCase().trim();
+    if (activeChatEmail !== fromEmail) openChatWith(fromEmail);
     appendMessage(data.text, 'peer');
 });
 
@@ -240,52 +270,61 @@ if (mobileBackBtn) {
 }
 
 // ==========================================
-// 5. ZERO-LOG VIDEO CALL LOGIC
+// 5. ZERO-LOG VIDEO CALL LOGIC (SYNCED)
 // ==========================================
 const rtcConfig = {
     iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
 };
 
 async function setupWebRTC(targetEmail, isCaller) {
-    localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-    localVideo.srcObject = localStream;
-    videoOverlay.classList.remove('hidden');
+    currentCallPeer = targetEmail.toLowerCase().trim();
+    try {
+        localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        localVideo.srcObject = localStream;
+        videoOverlay.classList.remove('hidden');
 
-    peerConnection = new RTCPeerConnection(rtcConfig);
-    localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+        peerConnection = new RTCPeerConnection(rtcConfig);
+        localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
 
-    peerConnection.ontrack = (event) => {
-        remoteVideo.srcObject = event.streams[0];
-    };
+        peerConnection.ontrack = (event) => {
+            remoteVideo.srcObject = event.streams[0];
+        };
 
-    peerConnection.onicecandidate = (event) => {
-        if (event.candidate) {
-            socket.emit('webrtc-signal', { to: targetEmail, signal: { candidate: event.candidate } });
+        peerConnection.onicecandidate = (event) => {
+            if (event.candidate && currentCallPeer) {
+                socket.emit('webrtc-signal', { to: currentCallPeer, signal: { candidate: event.candidate } });
+            }
+        };
+
+        if (isCaller) {
+            const offer = await peerConnection.createOffer();
+            await peerConnection.setLocalDescription(offer);
+            socket.emit('webrtc-signal', { to: currentCallPeer, signal: { offer: offer } });
         }
-    };
-
-    if (isCaller) {
-        const offer = await peerConnection.createOffer();
-        await peerConnection.setLocalDescription(offer);
-        socket.emit('webrtc-signal', { to: targetEmail, signal: { offer: offer } });
+    } catch (err) {
+        alert("Camera/Microphone permission denied: " + err.message);
+        closeCallUI();
     }
 }
 
 startCallBtn.addEventListener('click', () => {
     if (activeChatEmail) setupWebRTC(activeChatEmail, true);
+    else alert("Pehle ek chat select karein!");
 });
 
 socket.on('webrtc-signal', async (data) => {
+    const senderEmail = data.from.toLowerCase().trim();
+
     if (!peerConnection) {
-        activeChatEmail = data.from;
-        await setupWebRTC(data.from, false);
+        openChatWith(senderEmail);
+        await setupWebRTC(senderEmail, false);
     }
 
     if (data.signal.offer) {
         await peerConnection.setRemoteDescription(new RTCSessionDescription(data.signal.offer));
         const answer = await peerConnection.createAnswer();
         await peerConnection.setLocalDescription(answer);
-        socket.emit('webrtc-signal', { to: data.from, signal: { answer: answer } });
+        socket.emit('webrtc-signal', { to: senderEmail, signal: { answer: answer } });
     } 
     else if (data.signal.answer) {
         await peerConnection.setRemoteDescription(new RTCSessionDescription(data.signal.answer));
@@ -296,30 +335,41 @@ socket.on('webrtc-signal', async (data) => {
 });
 
 micBtn.addEventListener('click', () => {
+    if (!localStream) return;
     isAudioMuted = !isAudioMuted;
     localStream.getAudioTracks().forEach(t => t.enabled = !isAudioMuted);
     micBtn.innerText = isAudioMuted ? "🔇 Unmute" : "🎤 Mute";
 });
 
 camBtn.addEventListener('click', () => {
+    if (!localStream) return;
     isVideoStopped = !isVideoStopped;
     localStream.getVideoTracks().forEach(t => t.enabled = !isVideoStopped);
     camBtn.innerText = isVideoStopped ? "📷 Cam On" : "📷 Cam Off";
 });
 
+// End call emits signal to peer
 endCallBtn.addEventListener('click', () => {
-    socket.emit('end-call', { to: activeChatEmail });
+    if (currentCallPeer) {
+        socket.emit('end-call', { to: currentCallPeer });
+    }
     closeCallUI();
 });
 
+// Remote side receives call ended event
 socket.on('call-ended', () => {
     closeCallUI();
 });
 
 function closeCallUI() {
-    if (peerConnection) peerConnection.close();
-    if (localStream) localStream.getTracks().forEach(track => track.stop());
-    peerConnection = null;
-    localStream = null;
+    if (peerConnection) {
+        peerConnection.close();
+        peerConnection = null;
+    }
+    if (localStream) {
+        localStream.getTracks().forEach(track => track.stop());
+        localStream = null;
+    }
+    currentCallPeer = null;
     videoOverlay.classList.add('hidden');
 }

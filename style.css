@@ -31,7 +31,7 @@ body {
 
 .hidden { display: none !important; }
 
-/* AUTH SCREEN STYLES */
+/* AUTH SCREEN */
 .auth-container {
     display: flex;
     justify-content: center;
@@ -85,6 +85,7 @@ body {
     background: #202c33;
     display: flex;
     align-items: center;
+    justify-content: space-between;
 }
 
 .user-profile {
