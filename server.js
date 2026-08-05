@@ -8,24 +8,24 @@ app.use(express.static(__dirname));
 // Network mappings
 const onlineUsers = {}; // email -> socket.id
 const socketToEmail = {}; // socket.id -> email
-const registeredUsers = new Set(); // Registered email list
 
 io.on('connection', (socket) => {
     
     // 1. User comes online with Unique UID and Email
     socket.on('user-online', (data) => {
+        if (!data || !data.email) return;
         const email = data.email.toLowerCase().trim();
         onlineUsers[email] = socket.id;
         socketToEmail[socket.id] = email;
-        registeredUsers.add(email);
         console.log(`🔒 User Online: ${email} | UID: ${data.uid}`);
     });
 
-    // 2. Check if user exists before creating chat
+    // 2. Check if user is ONLINE before creating chat
     socket.on('check-user-exists', (email, callback) => {
         const targetEmail = email.toLowerCase().trim();
-        const exists = registeredUsers.has(targetEmail);
-        callback({ exists: exists });
+        // Since it's zero-log, they MUST be currently online to chat
+        const isOnline = !!onlineUsers[targetEmail]; 
+        callback({ exists: isOnline });
     });
 
     // 3. Route Text Messages

@@ -50,20 +50,29 @@ const camBtn = document.getElementById('cam-btn');
 
 let currentUser = null;
 let activeChatEmail = null; 
-let currentCallPeer = null; // Explicit call peer tracking
+let currentCallPeer = null; 
 let localStream = null;
 let peerConnection = null;
 let isAudioMuted = false;
 let isVideoStopped = false;
 
-// Stealth Mode State
 let secretPIN = localStorage.getItem('cryptoPIN') || '1234'; 
 let hiddenEmails = JSON.parse(localStorage.getItem('hiddenEmails')) || [];
 let isUnlocked = false;
 
 // ==========================================
-// 3. AUTHENTICATION & LOGOUT LOGIC
+// 3. AUTHENTICATION & SOCKET RECONNECTION
 // ==========================================
+
+// NEW FIX: Always re-register with server if connection drops!
+socket.on('connect', () => {
+    if (currentUser) {
+        const normalizedEmail = currentUser.email.toLowerCase().trim();
+        socket.emit('user-online', { email: normalizedEmail, uid: currentUser.uid });
+        console.log("Reconnected securely to server!");
+    }
+});
+
 loginBtn.addEventListener('click', async () => {
     const email = authEmail.value.trim().toLowerCase();
     const password = authPassword.value;
@@ -82,7 +91,6 @@ loginBtn.addEventListener('click', async () => {
     }
 });
 
-// Logout functionality
 logoutBtn.addEventListener('click', async () => {
     try {
         await signOut(auth);
@@ -107,7 +115,6 @@ onAuthStateChanged(auth, (user) => {
         appScreen.classList.remove('hidden');
         loginBtn.innerText = "Log In / Sign Up";
 
-        // Emit unique UID & normalized email
         socket.emit('user-online', { email: normalizedEmail, uid: user.uid });
         chatList.innerHTML = ''; 
     } else {
@@ -124,7 +131,6 @@ searchInput.addEventListener('keypress', (e) => {
         const text = searchInput.value.trim();
         if (!text) return;
 
-        // PIN unlock check
         if (text === secretPIN) {
             isUnlocked = true;
             searchInput.value = '';
@@ -133,7 +139,6 @@ searchInput.addEventListener('keypress', (e) => {
             return;
         }
 
-        // PIN change command
         if (text.startsWith('/pin ')) {
             const newPin = text.split(' ')[1];
             if (newPin && newPin.length >= 4) {
@@ -157,13 +162,13 @@ searchInput.addEventListener('keypress', (e) => {
             return;
         }
 
-        // Check if target user actually exists on server
+        // Only allow chat if user is currently online
         socket.emit('check-user-exists', targetEmail, (response) => {
             if (response && response.exists) {
                 openChatWith(targetEmail);
                 searchInput.value = '';
             } else {
-                alert(`User '${targetEmail}' exist nahi karta hai! User online ya registered hona chahiye.`);
+                alert(`User '${targetEmail}' is currently offline or does not exist!`);
             }
         });
     }
@@ -200,7 +205,6 @@ function openChatWith(email) {
     appScreen.classList.add('in-chat'); 
 }
 
-// Hide chat (Ghost Mode)
 hideChatBtn.addEventListener('click', () => {
     if (!activeChatEmail) return;
     
@@ -221,7 +225,6 @@ hideChatBtn.addEventListener('click', () => {
     alert("Ghost Mode Activated 👻. Chat hidden successfully!");
 });
 
-// Delete chat
 closeChatBtn.addEventListener('click', () => {
     if (!activeChatEmail) return;
 
@@ -238,7 +241,6 @@ closeChatBtn.addEventListener('click', () => {
     appScreen.classList.remove('in-chat');
 });
 
-// Messaging
 sendBtn.addEventListener('click', sendText);
 chatInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendText(); });
 
@@ -270,7 +272,7 @@ if (mobileBackBtn) {
 }
 
 // ==========================================
-// 5. ZERO-LOG VIDEO CALL LOGIC (SYNCED)
+// 5. ZERO-LOG VIDEO CALL LOGIC
 // ==========================================
 const rtcConfig = {
     iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
@@ -348,7 +350,6 @@ camBtn.addEventListener('click', () => {
     camBtn.innerText = isVideoStopped ? "📷 Cam On" : "📷 Cam Off";
 });
 
-// End call emits signal to peer
 endCallBtn.addEventListener('click', () => {
     if (currentCallPeer) {
         socket.emit('end-call', { to: currentCallPeer });
@@ -356,7 +357,6 @@ endCallBtn.addEventListener('click', () => {
     closeCallUI();
 });
 
-// Remote side receives call ended event
 socket.on('call-ended', () => {
     closeCallUI();
 });
